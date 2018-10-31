@@ -57,6 +57,41 @@ SPDX-License-Identifier: AGPL-3.0 %>
 
   <div class="row">
     <div class="col-md-<%= recent_procs_panel_width %>">
+      <% if show_node_status %>
+      <% nodes = Node.filter([["last_ping_at", ">", Time.now - 3600]]).results %>
+      <div class="panel panel-default" style="min-height: 10.5em">
+        <div class="panel-heading"><span class="panel-title">Compute node status</span>
+          <span class="pull-right compute-node-actions">
+            <% if current_user.andand.is_admin %>
+              <span>
+                <%= link_to nodes_path, class: 'btn btn-default btn-xs' do %>
+                  All nodes <i class="fa fa-fw fa-arrow-circle-right"></i>
+                <% end %>
+              </span>
+            <% end %>
+          </span>
+        </div>
+        <div class="panel-body compute-node-summary-pane">
+          <div>
+            <%= render partial: 'compute_node_summary', locals: {nodes: nodes} %>
+            <% active_nodes = [] %>
+            <% nodes.sort_by { |n| n.hostname || "" }.each do |n| %>
+              <% if n.crunch_worker_state.in? ["busy", "idle"] %>
+                <% active_nodes << n %>
+              <% end %>
+            <% end %>
+            <% if active_nodes.any? %>
+              <div style="text-align: center">
+                <a data-toggle="collapse" href="#compute_node_status">Details <span class="caret"></span></a>
+              </div>
+            <% end %>
+          </div>
+          <div id="compute_node_status" class="collapse">
+            <%= render partial: 'compute_node_status', locals: {nodes: active_nodes} %>
+          </div>
+        </div>
+      </div>
+      <% end %>
       <div class="panel panel-default" style="min-height: 10.5em">
         <div class="panel-heading">
           <span class="panel-title"><%=recent_procs_title%></span>
@@ -153,43 +188,50 @@ SPDX-License-Identifier: AGPL-3.0 %>
         </div>
       </div>
     </div>
-
+    
     <div class="col-md-6">
-      <% if show_node_status %>
-      <% nodes = Node.filter([["last_ping_at", ">", Time.now - 3600]]).results %>
-      <div class="panel panel-default" style="min-height: 10.5em">
-        <div class="panel-heading"><span class="panel-title">Compute node status</span>
-          <span class="pull-right compute-node-actions">
-            <% if current_user.andand.is_admin %>
-              <span>
-                <%= link_to nodes_path, class: 'btn btn-default btn-xs' do %>
-                  All nodes <i class="fa fa-fw fa-arrow-circle-right"></i>
-                <% end %>
-              </span>
+      <!-- Panel for Keepstore status -->
+      <div class="panel panel-default">
+        <div class="panel-heading"><span class="panel-title">Keep status</span>
+          <span class="pull-right">
+            <%= link_to "/keep_services", class: 'btn btn-default btn-xs' do %>
+              All keep services <i class="fa fa-fw fa-arrow-circle-right"></i>
             <% end %>
           </span>
         </div>
-        <div class="panel-body compute-node-summary-pane">
-          <div>
-            <%= render partial: 'compute_node_summary', locals: {nodes: nodes} %>
-            <% active_nodes = [] %>
-            <% nodes.sort_by { |n| n.hostname || "" }.each do |n| %>
-              <% if n.crunch_worker_state.in? ["busy", "idle"] %>
-                <% active_nodes << n %>
-              <% end %>
-            <% end %>
-            <% if active_nodes.any? %>
-              <div style="text-align: center">
-                <a data-toggle="collapse" href="#compute_node_status">Details <span class="caret"></span></a>
-              </div>
-            <% end %>
-          </div>
-          <div id="compute_node_status" class="collapse">
-            <%= render partial: 'compute_node_status', locals: {nodes: active_nodes} %>
-          </div>
+        <div class="panel-body">
+          <% services = KeepService.filter([["service_type", "=", "disk"]])
+             services.each do |s|  %>
+            <div class="dashboard-panel-info-row">
+                <div>
+                  <%= link_to_if_arvados_object s, {link_text: s[:service_host]} %>
+                  <% keep_status = s.status
+                     keep_status[:Volumes].each do |vol|
+                       total_size = vol[:Status][:BytesFree].to_i + vol[:Status][:BytesUsed].to_i
+                       usage = ( vol[:Status][:BytesUsed] * 100 ) / total_size
+                       prog_class = usage >= 90 ? "progress-bar-danger" : usage >= 75 ? "progress-bar-warning" : "progress-bar-info" %>
+                       <div style="margin-left: 2%; width: 98%"><%= vol[:Label] %>
+                         <div class="progress pull-right" style="width:75%">
+                           <div class="progress-bar <%= prog_class %>" role="progress-bar" style="text-align:center; width:<%= usage %>%" aria-valuenow="<%= usage %>" aria-valuemin="0" aria-valuemax="100">
+                             <% if usage > 5 %>
+                              <%= ApplicationController.helpers.human_readable_bytes_html(vol[:Status][:BytesUsed]) %> used
+                             <% end %>
+                           </div>
+                           <div class="progress-bar progress-bar-success" role="progress-bar" style="text-align:center; width:<%= 100 - usage %>%" aria-valuenow="<%= 100 - usage %>" aria-valuemin="0" aria-valuem
+ax="100">
+                             <% if usage < 95 %>
+                               <%= ApplicationController.helpers.human_readable_bytes_html(vol[:Status][:BytesFree]) %> free
+                             <% end %>
+                           </div>
+                         </div>
+                      </div>
+                  <% end %>
+                </div>
+            </div>
+          <% end %>
         </div>
       </div>
-      <% end %>
+
       <% if Rails.configuration.show_recent_collections_on_dashboard %>
       <div class="panel panel-default">
         <div class="panel-heading"><span class="panel-title">Recent collections</span>
@@ -215,5 +257,5 @@ SPDX-License-Identifier: AGPL-3.0 %>
         </div>
       </div>
       <% end %>
-    </div>
+    </div>   
   </div>
